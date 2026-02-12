@@ -1,0 +1,7 @@
+{
+  "name": "LA Visual Prompt Engine",
+  "description": "A professional prompt generator for landscape architects, optimized for Gemini nano-banana models. Convert core concepts into vivid, technical architectural prompts and visualize them instantly.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
