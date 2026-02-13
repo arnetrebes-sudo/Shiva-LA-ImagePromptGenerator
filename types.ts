@@ -30,7 +30,8 @@ export enum VisualisationCategory {
   EXPLODED = 'Exploded Drawing',
   MASTERPLAN = 'Masterplan Render',
   MOODBOARD = 'Texture Moodboard',
-  AXONOMETRIC = 'Axonometric Cutaway'
+  AXONOMETRIC = 'Axonometric Cutaway',
+  DETAIL_MACRO = 'Detail/Macro Shot'
 }
 
 export enum PerspectiveType {
