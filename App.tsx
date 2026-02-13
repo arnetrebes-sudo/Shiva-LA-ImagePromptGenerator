@@ -5,10 +5,11 @@ import {
   Compass, Check, Palette, Bookmark, BookmarkCheck, History, Library, Sun, Moon, Info, X,
   ExternalLink, Zap, Box, SunMedium, Layers, Wind, Droplets, FileDown, Play, Wand2,
   RefreshCw, Edit3, Save, Plus, Upload, Image as ImageIcon, Trash2, Share2, Globe, Quote,
-  UploadCloud, PlusCircle
+  UploadCloud, PlusCircle, AlertTriangle, ScrollText, Droplet, Mountain, Building2, Flower2,
+  Wind as WindIcon, Activity, Waves, ChevronDown, ChevronUp, Dice5
 } from 'lucide-react';
-import { GeneratedPrompt, LandscapeStyle, VisualisationCategory } from './types';
-import { generateLArchPrompts, visualizePrompt, editImage } from './services/geminiService';
+import { GeneratedPrompt, LandscapeStyle, VisualisationCategory, PromptTemplate } from './types';
+import { generateLArchPrompts, visualizePrompt, editImage, ServiceError, generateRandomTemplate } from './services/geminiService';
 
 const STORAGE_KEY = 'larch_saved_prompts';
 const GALLERY_STORAGE_KEY = 'larch_community_gallery_v3';
@@ -19,8 +20,104 @@ const VISUALIZING_STEPS = [
   "Simulating seasonal shifts...", "Finalizing render context..."
 ];
 
-// Default gallery is now empty as requested
-const DEFAULT_GALLERY: GalleryItem[] = [];
+const PRESET_TEMPLATES: PromptTemplate[] = [
+  {
+    id: 'public-plaza',
+    label: 'Public Plaza',
+    icon: 'Building2',
+    description: 'A vibrant urban node featuring modular basalt seating, interactive mist fountains, and high-performance shade canopies.',
+    style: LandscapeStyle.MODERNIST,
+    category: VisualisationCategory.PHOTOREALISTIC
+  },
+  {
+    id: 'wild-meadow',
+    label: 'Ecological Meadow',
+    icon: 'Flower2',
+    description: 'A biodiversity-focused rewilding project with native perennial drifts, weathered timber walkways, and gravel bioswales.',
+    style: LandscapeStyle.WILD,
+    category: VisualisationCategory.PHOTOREALISTIC
+  },
+  {
+    id: 'zen-atrium',
+    label: 'Zen Sanctuary',
+    icon: 'Mountain',
+    description: 'A minimalist courtyard for reflection. Raked granite sand, monolithic boulders, and a single sculptural Acer palmatum.',
+    style: LandscapeStyle.ZEN,
+    category: VisualisationCategory.PHOTOREALISTIC
+  },
+  {
+    id: 'waterfront',
+    label: 'Sponge Waterfront',
+    icon: 'Droplets',
+    description: 'Climate-resilient riverfront with stepped stone gabions, riparian planting zones, and floating wetland modules.',
+    style: LandscapeStyle.MODERNIST,
+    category: VisualisationCategory.AXONOMETRIC
+  },
+  {
+    id: 'industrial-park',
+    label: 'Industrial Reuse',
+    icon: 'Box',
+    description: 'Post-industrial landscape in an old rail yard. Corten steel structures, reclaimed brick paving, and pioneer birch groves.',
+    style: LandscapeStyle.INDUSTRIAL,
+    category: VisualisationCategory.MASTERPLAN
+  },
+  {
+    id: 'rooftop-forest',
+    label: 'Rooftop Forest',
+    icon: 'Trees',
+    description: 'High-density intensive green roof. Multi-stem Betula pendula in large GRP planters, deck seating, and integrated glass balustrades.',
+    style: LandscapeStyle.MODERNIST,
+    category: VisualisationCategory.PHOTOREALISTIC
+  },
+  {
+    id: 'inclusive-play',
+    label: 'Inclusive Play',
+    icon: 'Activity',
+    description: 'Multi-generational active landscape. Rubberized topography, bespoke timber climbing structures, and sensory planting of Stachys and Lavandula.',
+    style: LandscapeStyle.MODERNIST,
+    category: VisualisationCategory.PHOTOREALISTIC
+  },
+  {
+    id: 'luxury-retreat',
+    label: 'Luxury Retreat',
+    icon: 'Waves',
+    description: 'High-end residential terrace. Infinity pool with dark slate lining, travertine paving, and clipped Buxus hedges under aged Olive trees.',
+    style: LandscapeStyle.MEDITERRANEAN,
+    category: VisualisationCategory.PHOTOREALISTIC
+  },
+  {
+    id: 'healing-garden',
+    label: 'Healing Garden',
+    icon: 'Leaf',
+    description: 'Therapeutic hospital courtyard. Circular accessible paths, raised planters with aromatic herbs, and soft-textured ornamental grasses.',
+    style: LandscapeStyle.MINIMALIST,
+    category: VisualisationCategory.PHOTOREALISTIC
+  },
+  {
+    id: 'vertical-wall',
+    label: 'Living Facade',
+    icon: 'Layers',
+    description: 'Hydropontic vertical garden on a commercial facade. Patterned planting of ferns and Heuchera, integrated with structural steel and glass.',
+    style: LandscapeStyle.MODERNIST,
+    category: VisualisationCategory.DETAIL
+  },
+  {
+    id: 'campus-commons',
+    label: 'Campus Quad',
+    icon: 'Layout',
+    description: 'Institutional open space. Formal lawn flanked by Acer avenues, social seating "hubs" of pre-cast concrete, and high-quality granite setts.',
+    style: LandscapeStyle.MODERNIST,
+    category: VisualisationCategory.MASTERPLAN
+  },
+  {
+    id: 'arid-xeriscape',
+    label: 'Arid Xeriscape',
+    icon: 'SunMedium',
+    description: 'Water-wise desert landscape. Agave and Yucca specimens emerging from crushed limestone, accented by weathered steel edging and mood lighting.',
+    style: LandscapeStyle.XERISCAPE,
+    category: VisualisationCategory.PHOTOREALISTIC
+  }
+];
 
 interface GalleryItem {
   url: string;
@@ -43,14 +140,20 @@ const App: React.FC = () => {
 
   const [visualizingIds, setVisualizingIds] = useState<Set<string>>(new Set());
   const [visualizedImages, setVisualizedImages] = useState<Record<string, string>>({});
+  const [visualizationErrors, setVisualizationErrors] = useState<Record<string, ServiceError>>({});
   const [isBulkVisualizing, setIsBulkVisualizing] = useState(false);
   
   const [isEditingId, setIsEditingId] = useState<string | null>(null);
+  const [activeTemplateId, setActiveTemplateId] = useState<string | null>(null);
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [randomInspiration, setRandomInspiration] = useState<PromptTemplate | null>(null);
+  const [isGeneratingRandom, setIsGeneratingRandom] = useState(false);
 
   const [editingPromptId, setEditingPromptId] = useState<string | null>(null);
   const [tempPromptContent, setTempPromptContent] = useState<string>('');
 
-  const [error, setError] = useState<string | null>(null);
+  const [globalError, setGlobalError] = useState<ServiceError | null>(null);
+  const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'recent' | 'saved'>('recent');
   const [loadingStepIndex, setLoadingStepIndex] = useState(0);
@@ -60,7 +163,7 @@ const App: React.FC = () => {
 
   const [galleryImages, setGalleryImages] = useState<GalleryItem[]>(() => {
     const stored = localStorage.getItem(GALLERY_STORAGE_KEY);
-    return stored ? JSON.parse(stored) : DEFAULT_GALLERY;
+    return stored ? JSON.parse(stored) : [];
   });
 
   useEffect(() => {
@@ -101,6 +204,27 @@ const App: React.FC = () => {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(savedPrompts));
   }, [savedPrompts]);
+
+  const applyTemplate = (tpl: PromptTemplate) => {
+    setConcept(tpl.description);
+    setStyle(tpl.style);
+    setCategory(tpl.category);
+    setActiveTemplateId(tpl.id);
+    setFeedbackMessage(`Inspiration "${tpl.label}" applied`);
+    setTimeout(() => setFeedbackMessage(null), 2000);
+  };
+
+  const handleRandomInspiration = async () => {
+    setIsGeneratingRandom(true);
+    const { data, error } = await generateRandomTemplate();
+    if (error) {
+      setGlobalError(error);
+    } else if (data) {
+      setRandomInspiration(data);
+      setShowTemplates(true);
+    }
+    setIsGeneratingRandom(false);
+  };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -147,16 +271,16 @@ const App: React.FC = () => {
     setGalleryImages(prev => [...pendingUploads, ...prev].slice(0, 60));
     setPendingUploads([]);
     setIsUploadModalOpen(false);
-    setError(`Successfully added ${pendingUploads.length} renders to the Archive`);
-    setTimeout(() => setError(null), 4000);
+    setFeedbackMessage(`Successfully added ${pendingUploads.length} renders to the Archive`);
+    setTimeout(() => setFeedbackMessage(null), 4000);
   };
 
   const handleClearArchive = () => {
     if (window.confirm("Are you sure you want to delete all images from the Showcase Archive? This action cannot be undone.")) {
       setGalleryImages([]);
       localStorage.removeItem(GALLERY_STORAGE_KEY);
-      setError("Archive cleared successfully");
-      setTimeout(() => setError(null), 3000);
+      setFeedbackMessage("Archive cleared successfully");
+      setTimeout(() => setFeedbackMessage(null), 3000);
     }
   };
 
@@ -165,32 +289,40 @@ const App: React.FC = () => {
   const handleGenerate = async () => {
     if (!concept.trim()) return;
     setIsGenerating(true);
-    setError(null);
+    setGlobalError(null);
     setActiveTab('recent');
-    try {
-      const results = await generateLArchPrompts(concept, style, category, count, referenceImage || undefined);
-      setPrompts(results);
-    } catch (err) {
-      setError('Failed to generate prompts. Please try again.');
-    } finally {
-      setIsGenerating(false);
+    
+    const { data, error } = await generateLArchPrompts(concept, style, category, count, referenceImage || undefined);
+    
+    if (error) {
+      setGlobalError(error);
+    } else {
+      setPrompts(data);
     }
+    setIsGenerating(false);
   };
 
   const processSingleVisualization = useCallback(async (id: string, content: string) => {
     setVisualizingIds(prev => new Set(prev).add(id));
-    try {
-      const imageUrl = await visualizePrompt(content);
-      if (imageUrl) setVisualizedImages(prev => ({ ...prev, [id]: imageUrl }));
-    } catch (err) {
-      setError('Error during visualization.');
-    } finally {
-      setVisualizingIds(prev => {
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
-      });
+    setVisualizationErrors(prev => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+
+    const { url, error } = await visualizePrompt(content);
+    
+    if (error) {
+      setVisualizationErrors(prev => ({ ...prev, [id]: error }));
+    } else if (url) {
+      setVisualizedImages(prev => ({ ...prev, [id]: url }));
     }
+
+    setVisualizingIds(prev => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
   }, []);
 
   const handleVisualize = (id: string, content: string) => {
@@ -250,6 +382,24 @@ const App: React.FC = () => {
     setPendingUploads(prev => prev.filter((_, i) => i !== index));
   };
 
+  const getTemplateIcon = (iconName: string) => {
+    switch(iconName) {
+      case 'Building2': return <Building2 className="w-3.5 h-3.5" />;
+      case 'Flower2': return <Flower2 className="w-3.5 h-3.5" />;
+      case 'Mountain': return <Mountain className="w-3.5 h-3.5" />;
+      case 'Droplets': return <Droplets className="w-3.5 h-3.5" />;
+      case 'Box': return <Box className="w-3.5 h-3.5" />;
+      case 'Trees': return <Trees className="w-3.5 h-3.5" />;
+      case 'Activity': return <Activity className="w-3.5 h-3.5" />;
+      case 'Waves': return <Waves className="w-3.5 h-3.5" />;
+      case 'Leaf': return <Leaf className="w-3.5 h-3.5" />;
+      case 'Layers': return <Layers className="w-3.5 h-3.5" />;
+      case 'Layout': return <Layout className="w-3.5 h-3.5" />;
+      case 'SunMedium': return <SunMedium className="w-3.5 h-3.5" />;
+      default: return <ScrollText className="w-3.5 h-3.5" />;
+    }
+  };
+
   return (
     <div className="min-h-screen flex flex-col text-slate-700 dark:text-slate-200 bg-[#fdfcfb] dark:bg-slate-950 transition-colors duration-300">
       <header className="bg-white/70 dark:bg-slate-900/70 backdrop-blur-md border-b border-orange-100 dark:border-slate-800 py-6 px-4 sticky top-0 z-50">
@@ -268,11 +418,20 @@ const App: React.FC = () => {
         </div>
       </header>
 
-      {error && (
-        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[60] animate-in fade-in slide-in-from-top-4">
-          <div className="bg-orange-600 text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-2 font-bold text-sm">
+      <section className="bg-orange-500 dark:bg-orange-600 py-4 px-4 shadow-md z-40">
+        <div className="max-w-6xl mx-auto flex items-center justify-center gap-3 text-white text-center">
+          <Zap className="w-5 h-5 fill-white flex-shrink-0 hidden sm:block" />
+          <p className="text-sm font-bold tracking-tight leading-snug">
+            This is a <span className="underline decoration-white/50 underline-offset-4 font-black">LA Shiva Tool</span> designed to help Landscapearchitects and Planners with fast sketching of new ideas
+          </p>
+        </div>
+      </section>
+
+      {feedbackMessage && (
+        <div className="fixed top-32 left-1/2 -translate-x-1/2 z-[60] animate-in fade-in slide-in-from-top-4">
+          <div className="bg-green-600 text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-2 font-bold text-sm">
             <Check className="w-4 h-4" />
-            {error}
+            {feedbackMessage}
           </div>
         </div>
       )}
@@ -307,41 +466,28 @@ const App: React.FC = () => {
                       <button onClick={() => removePendingUpload(index)} className="absolute top-2 right-2 p-1.5 bg-red-500/90 text-white rounded-lg shadow-lg hover:scale-110 active:scale-95 transition-all">
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
-                      <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/60 backdrop-blur-sm rounded text-[8px] text-white font-bold uppercase tracking-tighter">
-                        Item #{index + 1}
-                      </div>
                     </div>
                     <div className="space-y-3">
-                      <div>
-                        <input 
-                          type="text" 
-                          placeholder="Project Title"
-                          value={item.title} 
-                          onChange={(e) => updatePendingUpload(index, 'title', e.target.value)} 
-                          className="w-full p-2.5 rounded-xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs font-bold outline-none focus:ring-2 ring-orange-100 transition-all" 
-                        />
-                      </div>
-                      <div>
-                        <textarea 
-                          placeholder="Technical description..."
-                          value={item.prompt} 
-                          onChange={(e) => updatePendingUpload(index, 'prompt', e.target.value)} 
-                          className="w-full p-2.5 h-16 rounded-xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-950 text-[11px] outline-none focus:ring-2 ring-orange-100 transition-all resize-none" 
-                        />
-                      </div>
+                      <input 
+                        type="text" 
+                        placeholder="Project Title"
+                        value={item.title} 
+                        onChange={(e) => updatePendingUpload(index, 'title', e.target.value)} 
+                        className="w-full p-2.5 rounded-xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs font-bold outline-none focus:ring-2 ring-orange-100 transition-all" 
+                      />
+                      <textarea 
+                        placeholder="Technical description..."
+                        value={item.prompt} 
+                        onChange={(e) => updatePendingUpload(index, 'prompt', e.target.value)} 
+                        className="w-full p-2.5 h-16 rounded-xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-950 text-[11px] outline-none focus:ring-2 ring-orange-100 transition-all resize-none" 
+                      />
                     </div>
                   </div>
                 ))}
               </div>
-              {pendingUploads.length === 0 && (
-                <div className="text-center py-20 text-slate-400 italic">No files selected. Add some renders to begin.</div>
-              )}
             </div>
 
             <div className="mt-8 pt-6 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-4">
-               <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
-                 Ready to publish {pendingUploads.length} architectural studies
-               </p>
                <button 
                 onClick={submitManualGalleryUpload} 
                 disabled={pendingUploads.length === 0}
@@ -357,8 +503,64 @@ const App: React.FC = () => {
       <main className="flex-1 max-w-6xl mx-auto w-full p-4 md:p-10 grid grid-cols-1 lg:grid-cols-12 gap-10">
         <section className="lg:col-span-5 space-y-8">
           <div className="bg-white dark:bg-slate-900 rounded-[2rem] shadow-sm border border-orange-50 dark:border-slate-800 p-8">
-            <div className="flex items-center gap-2 mb-6 text-orange-900 dark:text-orange-100"><Sparkles className="w-5 h-5 text-orange-400" /><h2 className="font-bold text-lg">Core Concept</h2></div>
-            <textarea className="w-full h-48 p-5 rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50/30 dark:bg-slate-950/30 focus:bg-white dark:focus:bg-slate-950 focus:ring-4 focus:ring-orange-100 focus:border-orange-200 outline-none transition-all placeholder:text-slate-300 dark:placeholder:text-slate-600 mb-6" placeholder="Describe the atmosphere, materiality, and botanical highlights..." value={concept} onChange={(e) => setConcept(e.target.value)} />
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2 text-orange-900 dark:text-orange-100">
+                <Sparkles className="w-5 h-5 text-orange-400" />
+                <h2 className="font-bold text-lg">Inspiration Library</h2>
+              </div>
+              <button 
+                onClick={() => setShowTemplates(!showTemplates)}
+                className="p-2 rounded-full hover:bg-orange-50 dark:hover:bg-slate-800 text-slate-400 transition-all"
+              >
+                {showTemplates ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+              </button>
+            </div>
+
+            {/* Template Spoiler */}
+            <div className={`overflow-hidden transition-all duration-500 ease-in-out ${showTemplates ? 'max-h-[500px] mb-6 opacity-100' : 'max-h-0 opacity-0'}`}>
+              <div className="flex flex-wrap gap-2 p-1 border-t border-slate-100 dark:border-slate-800 pt-4">
+                <button 
+                  onClick={handleRandomInspiration}
+                  disabled={isGeneratingRandom}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-bold transition-all border bg-slate-900 text-white border-slate-900 hover:bg-black dark:bg-slate-100 dark:text-slate-900 dark:border-slate-100 active:scale-95"
+                >
+                  {isGeneratingRandom ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Dice5 className="w-3.5 h-3.5" />}
+                  AI Surprise
+                </button>
+                
+                {randomInspiration && (
+                  <button 
+                    onClick={() => applyTemplate(randomInspiration)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-bold transition-all border animate-in zoom-in-95 ${activeTemplateId === randomInspiration.id ? 'bg-purple-500 border-purple-500 text-white' : 'bg-purple-50 dark:bg-purple-900/20 border-purple-100 dark:border-purple-800 text-purple-600 hover:bg-purple-100'}`}
+                  >
+                    {getTemplateIcon(randomInspiration.icon)}
+                    {randomInspiration.label} (NEW)
+                  </button>
+                )}
+
+                {PRESET_TEMPLATES.map(tpl => (
+                  <button 
+                    key={tpl.id} 
+                    onClick={() => applyTemplate(tpl)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-bold transition-all border ${activeTemplateId === tpl.id ? 'bg-orange-400 border-orange-400 text-white' : 'bg-slate-50 dark:bg-slate-800 border-slate-100 dark:border-slate-700 text-slate-500 hover:border-orange-200 hover:bg-orange-50'}`}
+                  >
+                    {getTemplateIcon(tpl.icon)}
+                    {tpl.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <textarea 
+              className="w-full h-48 p-5 rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50/30 dark:bg-slate-950/30 focus:bg-white dark:focus:bg-slate-950 focus:ring-4 focus:ring-orange-100 focus:border-orange-200 outline-none transition-all placeholder:text-slate-300 dark:placeholder:text-slate-600 mb-6" 
+              placeholder="Describe the atmosphere, materiality, and botanical highlights..." 
+              value={concept} 
+              onChange={(e) => {
+                setConcept(e.target.value);
+                setActiveTemplateId(null);
+              }} 
+            />
+            
             <div className="mb-6">
               {!referenceImage ? (
                 <button onClick={() => fileInputRef.current?.click()} className="w-full border-2 border-dashed border-slate-100 dark:border-slate-800 rounded-2xl p-6 hover:border-orange-200 hover:bg-orange-50/30 transition-all flex flex-col items-center gap-2">
@@ -369,10 +571,28 @@ const App: React.FC = () => {
                 <div className="relative rounded-2xl overflow-hidden border border-orange-100 dark:border-slate-800"><img src={`data:${referenceImage.mimeType};base64,${referenceImage.data}`} className="w-full h-32 object-cover opacity-80" alt="Reference" /><button onClick={removeReferenceImage} className="absolute top-2 right-2 p-2 bg-red-500 text-white rounded-xl shadow-lg hover:scale-110 active:scale-95 transition-all"><Trash2 className="w-4 h-4" /></button></div>
               )}
             </div>
+
             <div className="grid grid-cols-2 gap-4 mb-6">
-              <select className="p-3.5 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-600 dark:text-slate-300 text-sm outline-none" value={style} onChange={(e) => setStyle(e.target.value as LandscapeStyle)}>{Object.values(LandscapeStyle).map(s => <option key={s} value={s}>{s}</option>)}</select>
-              <select className="p-3.5 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-600 dark:text-slate-300 text-sm outline-none" value={category} onChange={(e) => setCategory(e.target.value as VisualisationCategory)}>{Object.values(VisualisationCategory).map(v => <option key={v} value={v}>{v}</option>)}</select>
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase tracking-widest font-bold text-slate-400 px-1">Typology</label>
+                <select className="w-full p-3.5 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-600 dark:text-slate-300 text-sm outline-none" value={style} onChange={(e) => setStyle(e.target.value as LandscapeStyle)}>{Object.values(LandscapeStyle).map(s => <option key={s} value={s}>{s}</option>)}</select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase tracking-widest font-bold text-slate-400 px-1">View Type</label>
+                <select className="w-full p-3.5 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-600 dark:text-slate-300 text-sm outline-none" value={category} onChange={(e) => setCategory(e.target.value as VisualisationCategory)}>{Object.values(VisualisationCategory).map(v => <option key={v} value={v}>{v}</option>)}</select>
+              </div>
             </div>
+
+            {globalError && (
+              <div className="mb-6 p-4 rounded-xl bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/30 flex items-start gap-3 animate-in fade-in zoom-in-95">
+                <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-xs font-bold text-red-700 dark:text-red-400 uppercase tracking-tight mb-1">{globalError.type} ERROR</p>
+                  <p className="text-[13px] text-red-600 dark:text-red-300 font-medium leading-relaxed">{globalError.message}</p>
+                </div>
+              </div>
+            )}
+
             <button onClick={handleGenerate} disabled={isGenerating || !concept.trim()} className="w-full bg-orange-400 hover:bg-orange-500 disabled:bg-slate-200 text-white font-bold py-4.5 rounded-2xl shadow-lg transition-all flex items-center justify-center gap-2 group active:scale-[0.98]">{isGenerating ? <Loader2 className="w-5 h-5 animate-spin" /> : <>Generate Prompts<ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" /></>}</button>
             <button onClick={handleRenderAll} disabled={isBulkVisualizing || prompts.length === 0} className="w-full mt-4 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 font-bold py-4 rounded-2xl shadow-lg transition-all flex items-center justify-center gap-2 group active:scale-[0.98] disabled:opacity-30">{isBulkVisualizing ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Wand2 className="w-5 h-5" />Generate Visuals</>}</button>
           </div>
@@ -387,6 +607,12 @@ const App: React.FC = () => {
           </div>
 
           <div className="space-y-8">
+            {displayedPrompts.length === 0 && (
+              <div className="bg-white dark:bg-slate-900 rounded-[2rem] p-12 text-center border border-dashed border-slate-200 dark:border-slate-800">
+                <Trees className="w-12 h-12 text-slate-200 dark:text-slate-700 mx-auto mb-4" />
+                <p className="text-slate-400 italic text-sm">No prompts generated yet. Start by defining your core concept.</p>
+              </div>
+            )}
             {displayedPrompts.map((prompt) => (
               <div key={prompt.id} className="bg-white dark:bg-slate-900 rounded-[2rem] shadow-sm border border-slate-100 dark:border-slate-800 overflow-hidden transition-all duration-300">
                 <div className="p-8">
@@ -418,7 +644,18 @@ const App: React.FC = () => {
                   <div className="px-6 pb-6"><div className="rounded-[1.5rem] border border-orange-100 dark:border-slate-800 bg-slate-50/50 p-12 flex flex-col items-center justify-center min-h-[300px]"><Loader2 className="w-10 h-10 animate-spin text-orange-400 mb-4" /><p className="text-slate-500 text-sm font-bold uppercase tracking-widest">{VISUALIZING_STEPS[loadingStepIndex]}</p></div></div>
                 )}
 
-                {visualizedImages[prompt.id] && !visualizingIds.has(prompt.id) && isEditingId !== prompt.id && (
+                {visualizationErrors[prompt.id] && !visualizingIds.has(prompt.id) && (
+                   <div className="px-6 pb-6 animate-in fade-in slide-in-from-bottom-2">
+                     <div className="rounded-2xl border border-red-100 dark:border-red-900/30 bg-red-50/30 dark:bg-red-900/5 p-8 flex flex-col items-center text-center">
+                        <AlertCircle className="w-10 h-10 text-red-400 mb-4" />
+                        <h4 className="text-sm font-bold text-red-700 dark:text-red-400 uppercase tracking-widest mb-1">Visualization Failed</h4>
+                        <p className="text-xs text-red-600 dark:text-red-300 max-w-sm mb-6">{visualizationErrors[prompt.id].message}</p>
+                        <button onClick={() => handleVisualize(prompt.id, prompt.content)} className="px-6 py-2 bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-400 text-xs font-bold rounded-xl hover:bg-red-200 transition-colors flex items-center gap-2"><RefreshCw className="w-3.5 h-3.5" /> Retry Render</button>
+                     </div>
+                   </div>
+                )}
+
+                {visualizedImages[prompt.id] && !visualizingIds.has(prompt.id) && !visualizationErrors[prompt.id] && isEditingId !== prompt.id && (
                   <div className="px-6 pb-6 animate-in fade-in slide-in-from-bottom-4">
                     <div className="relative group rounded-2xl overflow-hidden shadow-inner bg-slate-100 dark:bg-slate-950">
                       <img src={visualizedImages[prompt.id]} className="w-full object-cover max-h-[500px]" alt="AI Preview" />
@@ -458,7 +695,7 @@ const App: React.FC = () => {
               <div className="w-16 h-16 bg-orange-50 dark:bg-slate-800 rounded-full flex items-center justify-center text-orange-500"><UploadCloud className="w-8 h-8" /></div>
               <div className="text-center">
                 <h3 className="text-lg font-bold">Manage Studio Showcase</h3>
-                <p className="text-sm text-slate-500 mt-2">Upload multiple renders in a single session to feature them. You can append more files after the initial selection.</p>
+                <p className="text-sm text-slate-500 mt-2">Upload multiple renders in a single session to feature them.</p>
               </div>
               <div className="flex flex-wrap justify-center gap-4 w-full">
                 <button onClick={() => galleryManualRef.current?.click()} className="flex-1 min-w-[200px] bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 px-8 py-3.5 rounded-2xl text-sm font-bold flex items-center justify-center gap-2 hover:scale-105 active:scale-95 transition-all">
@@ -477,7 +714,17 @@ const App: React.FC = () => {
       </main>
 
       <footer className="bg-white dark:bg-slate-900 border-t border-orange-50 py-12 px-6 transition-colors duration-300">
-        <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6"><div className="text-center md:text-left"><p className="text-slate-400 text-xs font-medium mb-1">&copy; 2024 LA Visual Prompt Engine</p><p className="text-slate-300 text-[10px] uppercase tracking-widest font-bold">Optimized for Gemini Flash Image & Pro Preview</p></div><div className="flex items-center gap-3"><span className="h-1.5 w-1.5 rounded-full bg-orange-400 animate-pulse"></span><span className="text-orange-400 font-bold text-[10px] uppercase tracking-widest">Studio Pipeline Active</span></div></div>
+        <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
+          <div className="text-center md:text-left">
+            <p className="text-slate-400 text-xs font-medium mb-1">&copy; 2024 LA Visual Prompt Engine Version 2.1</p>
+            <p className="text-slate-300 text-[10px] uppercase tracking-widest font-bold">Optimized for Gemini Flash Image & Pro Preview</p>
+            <p className="text-slate-300 text-[10px] uppercase tracking-widest font-bold">part of the LA Shiva Toolsuite</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="h-1.5 w-1.5 rounded-full bg-orange-400 animate-pulse"></span>
+            <span className="text-orange-400 font-bold text-[10px] uppercase tracking-widest">Studio Pipeline Active</span>
+          </div>
+        </div>
       </footer>
     </div>
   );

@@ -7,6 +7,15 @@ export interface GeneratedPrompt {
   technicalDetails: string[];
 }
 
+export interface PromptTemplate {
+  id: string;
+  label: string;
+  icon: string;
+  description: string;
+  style: LandscapeStyle;
+  category: VisualisationCategory;
+}
+
 export enum LandscapeStyle {
   MODERNIST = 'Modernist',
   XERISCAPE = 'Xeriscape/Dry',
