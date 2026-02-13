@@ -180,37 +180,3 @@ export const visualizePrompt = async (prompt: string, aspectRatio: string = "16:
     return { url: null, error: handleApiError(error) };
   }
 };
-
-export const editImage = async (base64Image: string, instruction: string): Promise<{ url: string | null, error: ServiceError | null }> => {
-  try {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    const data = base64Image.split(',')[1];
-    const mimeType = base64Image.split(',')[0].split(':')[1].split(';')[0];
-
-    const response: GenerateContentResponse = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-image',
-      contents: {
-        parts: [
-          {
-            inlineData: {
-              data: data,
-              mimeType: mimeType,
-            },
-          },
-          {
-            text: instruction,
-          },
-        ],
-      },
-    });
-
-    for (const part of response.candidates?.[0]?.content?.parts || []) {
-      if (part.inlineData) {
-        return { url: `data:image/png;base64,${part.inlineData.data}`, error: null };
-      }
-    }
-    return { url: null, error: { type: 'unknown', message: 'Edit operation failed to return an image.' } };
-  } catch (error: any) {
-    return { url: null, error: handleApiError(error) };
-  }
-};

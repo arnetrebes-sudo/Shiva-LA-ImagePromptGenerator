@@ -1,15 +1,15 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { 
+import {
   Leaf, Sparkles, Copy, Eye, ChevronRight, Loader2, Download, AlertCircle, Layout, Trees,
-  Compass, Check, Palette, Bookmark, BookmarkCheck, History, Library, Sun, Moon, Info, X,
-  ExternalLink, Zap, Box, SunMedium, Layers, Wind, Droplets, FileDown, Play, Wand2,
-  RefreshCw, Edit3, Save, Plus, Upload, Image as ImageIcon, Trash2, Share2, Globe, Quote,
-  UploadCloud, PlusCircle, AlertTriangle, ScrollText, Droplet, Mountain, Building2, Flower2,
-  Wind as WindIcon, Activity, Waves, ChevronDown, ChevronUp, Dice5
+  Check, Bookmark, BookmarkCheck, History, Library, Sun, Moon, X,
+  Zap, Box, SunMedium, Layers, Droplets, Wand2,
+  RefreshCw, Edit3, Save, Upload, Image as ImageIcon, Trash2, Share2, Globe, Quote,
+  UploadCloud, PlusCircle, AlertTriangle, ScrollText, Mountain, Building2, Flower2,
+  Activity, Waves, ChevronDown, ChevronUp, Dice5
 } from 'lucide-react';
 import { GeneratedPrompt, LandscapeStyle, VisualisationCategory, PromptTemplate } from './types';
-import { generateLArchPrompts, visualizePrompt, editImage, ServiceError, generateRandomTemplate } from './services/geminiService';
+import { generateLArchPrompts, visualizePrompt, ServiceError, generateRandomTemplate } from './services/geminiService';
 
 const STORAGE_KEY = 'larch_saved_prompts';
 const GALLERY_STORAGE_KEY = 'larch_community_gallery_v3';
@@ -130,7 +130,6 @@ const App: React.FC = () => {
   const [concept, setConcept] = useState('');
   const [style, setStyle] = useState<LandscapeStyle>(LandscapeStyle.MODERNIST);
   const [category, setCategory] = useState<VisualisationCategory>(VisualisationCategory.PHOTOREALISTIC);
-  const [count, setCount] = useState(3);
   const [prompts, setPrompts] = useState<GeneratedPrompt[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   
@@ -143,7 +142,6 @@ const App: React.FC = () => {
   const [visualizationErrors, setVisualizationErrors] = useState<Record<string, ServiceError>>({});
   const [isBulkVisualizing, setIsBulkVisualizing] = useState(false);
   
-  const [isEditingId, setIsEditingId] = useState<string | null>(null);
   const [activeTemplateId, setActiveTemplateId] = useState<string | null>(null);
   const [showTemplates, setShowTemplates] = useState(false);
   const [randomInspiration, setRandomInspiration] = useState<PromptTemplate | null>(null);
@@ -162,8 +160,10 @@ const App: React.FC = () => {
   const [pendingUploads, setPendingUploads] = useState<GalleryItem[]>([]);
 
   const [galleryImages, setGalleryImages] = useState<GalleryItem[]>(() => {
-    const stored = localStorage.getItem(GALLERY_STORAGE_KEY);
-    return stored ? JSON.parse(stored) : [];
+    try {
+      const stored = localStorage.getItem(GALLERY_STORAGE_KEY);
+      return stored ? JSON.parse(stored) : [];
+    } catch { return []; }
   });
 
   useEffect(() => {
@@ -172,13 +172,13 @@ const App: React.FC = () => {
 
   useEffect(() => {
     let interval: number;
-    if (visualizingIds.size > 0 || isEditingId) {
+    if (visualizingIds.size > 0) {
       interval = window.setInterval(() => {
         setLoadingStepIndex(prev => (prev + 1) % VISUALIZING_STEPS.length);
       }, 2000);
     }
     return () => clearInterval(interval);
-  }, [visualizingIds.size, isEditingId]);
+  }, [visualizingIds.size]);
 
   const [isDark, setIsDark] = useState<boolean>(() => {
     const stored = localStorage.getItem(THEME_KEY);
@@ -197,8 +197,10 @@ const App: React.FC = () => {
   }, [isDark]);
 
   const [savedPrompts, setSavedPrompts] = useState<GeneratedPrompt[]>(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    return stored ? JSON.parse(stored) : [];
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      return stored ? JSON.parse(stored) : [];
+    } catch { return []; }
   });
 
   useEffect(() => {
@@ -292,7 +294,7 @@ const App: React.FC = () => {
     setGlobalError(null);
     setActiveTab('recent');
     
-    const { data, error } = await generateLArchPrompts(concept, style, category, count, referenceImage || undefined);
+    const { data, error } = await generateLArchPrompts(concept, style, category, 3, referenceImage || undefined);
     
     if (error) {
       setGlobalError(error);
@@ -594,7 +596,7 @@ const App: React.FC = () => {
             )}
 
             <button onClick={handleGenerate} disabled={isGenerating || !concept.trim()} className="w-full bg-orange-400 hover:bg-orange-500 disabled:bg-slate-200 text-white font-bold py-4.5 rounded-2xl shadow-lg transition-all flex items-center justify-center gap-2 group active:scale-[0.98]">{isGenerating ? <Loader2 className="w-5 h-5 animate-spin" /> : <>Generate Prompts<ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" /></>}</button>
-            <button onClick={handleRenderAll} disabled={isBulkVisualizing || prompts.length === 0} className="w-full mt-4 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 font-bold py-4 rounded-2xl shadow-lg transition-all flex items-center justify-center gap-2 group active:scale-[0.98] disabled:opacity-30">{isBulkVisualizing ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Wand2 className="w-5 h-5" />Generate Visuals</>}</button>
+            <button onClick={handleRenderAll} disabled={isBulkVisualizing || displayedPrompts.length === 0} className="w-full mt-4 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 font-bold py-4 rounded-2xl shadow-lg transition-all flex items-center justify-center gap-2 group active:scale-[0.98] disabled:opacity-30">{isBulkVisualizing ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Wand2 className="w-5 h-5" />Generate Visuals</>}</button>
           </div>
         </section>
 
@@ -640,7 +642,7 @@ const App: React.FC = () => {
                   </div>
                 </div>
 
-                {(visualizingIds.has(prompt.id) || isEditingId === prompt.id) && (
+                {visualizingIds.has(prompt.id) && (
                   <div className="px-6 pb-6"><div className="rounded-[1.5rem] border border-orange-100 dark:border-slate-800 bg-slate-50/50 p-12 flex flex-col items-center justify-center min-h-[300px]"><Loader2 className="w-10 h-10 animate-spin text-orange-400 mb-4" /><p className="text-slate-500 text-sm font-bold uppercase tracking-widest">{VISUALIZING_STEPS[loadingStepIndex]}</p></div></div>
                 )}
 
@@ -655,7 +657,7 @@ const App: React.FC = () => {
                    </div>
                 )}
 
-                {visualizedImages[prompt.id] && !visualizingIds.has(prompt.id) && !visualizationErrors[prompt.id] && isEditingId !== prompt.id && (
+                {visualizedImages[prompt.id] && !visualizingIds.has(prompt.id) && !visualizationErrors[prompt.id] && (
                   <div className="px-6 pb-6 animate-in fade-in slide-in-from-bottom-4">
                     <div className="relative group rounded-2xl overflow-hidden shadow-inner bg-slate-100 dark:bg-slate-950">
                       <img src={visualizedImages[prompt.id]} className="w-full object-cover max-h-[500px]" alt="AI Preview" />
