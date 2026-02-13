@@ -42,11 +42,3 @@ export enum VisualisationCategory {
   AXONOMETRIC = 'Axonometric Cutaway',
   DETAIL_MACRO = 'Detail/Macro Shot'
 }
-
-export enum PerspectiveType {
-  EYE_LEVEL = 'Eye-level Perspective',
-  AERIAL = 'Aerial/Birdseye View',
-  PLAN = 'Site Plan/Layout',
-  SECTION = 'Cross-section Detail',
-  MACRO = 'Planting/Macro Detail'
-}
