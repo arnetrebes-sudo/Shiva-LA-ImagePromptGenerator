@@ -5,7 +5,7 @@ import {
   Compass, Check, Palette, Bookmark, BookmarkCheck, History, Library, Sun, Moon, Info, X,
   ExternalLink, Zap, Box, SunMedium, Layers, Wind, Droplets, FileDown, Play, Wand2,
   RefreshCw, Edit3, Save, Plus, Upload, Image as ImageIcon, Trash2, Share2, Globe, Quote,
-  UploadCloud
+  UploadCloud, PlusCircle
 } from 'lucide-react';
 import { GeneratedPrompt, LandscapeStyle, VisualisationCategory } from './types';
 import { generateLArchPrompts, visualizePrompt, editImage } from './services/geminiService';
@@ -19,11 +19,8 @@ const VISUALIZING_STEPS = [
   "Simulating seasonal shifts...", "Finalizing render context..."
 ];
 
-const DEFAULT_GALLERY = [
-  { url: 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?q=80&w=800&auto=format&fit=crop', type: 'Technical Section', title: 'Coastal Reinforcement Detail', prompt: 'Detailed cross-section of a coastal landscape reinforcement system using gabion walls.' },
-  { url: 'https://images.unsplash.com/photo-1600585154340-be6199f7d009?q=80&w=800&auto=format&fit=crop', type: 'Isometric Diagram', title: 'Mediterranean Stone Terrace', prompt: 'Isometric view of a mediterranean terraced garden with limestone walls.' },
-  { url: 'https://images.unsplash.com/photo-1558449028-b53a39d100fc?q=80&w=800&auto=format&fit=crop', type: 'Photorealistic Render', title: 'Coastal Serpentine Path', prompt: 'Photorealistic render of a serpentine wooden boardwalk through coastal dunes.' }
-];
+// Default gallery is now empty as requested
+const DEFAULT_GALLERY: GalleryItem[] = [];
 
 interface GalleryItem {
   url: string;
@@ -134,24 +131,33 @@ const App: React.FC = () => {
       const url = await filePromise;
       newPending.push({
         url,
-        title: `Archive Entry ${galleryImages.length + i + 1}`,
+        title: `Archive Entry ${galleryImages.length + pendingUploads.length + i + 1}`,
         type: category,
-        prompt: `Batch upload: ${file.name}`
+        prompt: `Site study: ${file.name}`
       });
     }
 
-    setPendingUploads(newPending);
+    setPendingUploads(prev => [...prev, ...newPending]);
     setIsUploadModalOpen(true);
     e.target.value = ''; 
   };
 
   const submitManualGalleryUpload = () => {
     if (pendingUploads.length === 0) return;
-    setGalleryImages(prev => [...pendingUploads, ...prev].slice(0, 20));
+    setGalleryImages(prev => [...pendingUploads, ...prev].slice(0, 60));
     setPendingUploads([]);
     setIsUploadModalOpen(false);
-    setError(`Shared ${pendingUploads.length} items to Showcase Archive`);
-    setTimeout(() => setError(null), 3000);
+    setError(`Successfully added ${pendingUploads.length} renders to the Archive`);
+    setTimeout(() => setError(null), 4000);
+  };
+
+  const handleClearArchive = () => {
+    if (window.confirm("Are you sure you want to delete all images from the Showcase Archive? This action cannot be undone.")) {
+      setGalleryImages([]);
+      localStorage.removeItem(GALLERY_STORAGE_KEY);
+      setError("Archive cleared successfully");
+      setTimeout(() => setError(null), 3000);
+    }
   };
 
   const removeReferenceImage = () => setReferenceImage(null);
@@ -208,7 +214,7 @@ const App: React.FC = () => {
     setGalleryImages(prev => [
       { url: imageUrl, type: prompt.perspective || 'Architectural View', title: prompt.title || 'User Contribution', prompt: prompt.content },
       ...prev
-    ].slice(0, 20));
+    ].slice(0, 60));
     setCopiedId(`shared-${prompt.id}`);
     setTimeout(() => setCopiedId(null), 2000);
   };
@@ -264,68 +270,84 @@ const App: React.FC = () => {
 
       {error && (
         <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[60] animate-in fade-in slide-in-from-top-4">
-          <div className="bg-orange-500 text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-2 font-bold text-sm">
-            <Info className="w-4 h-4" />
+          <div className="bg-orange-600 text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-2 font-bold text-sm">
+            <Check className="w-4 h-4" />
             {error}
           </div>
         </div>
       )}
 
       {isUploadModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
-          <div className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-[2.5rem] shadow-2xl overflow-hidden p-8 flex flex-col max-h-[90vh]">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-4xl rounded-[2.5rem] shadow-2xl overflow-hidden p-8 flex flex-col max-h-[90vh]">
             <div className="flex justify-between items-start mb-6">
               <div>
-                <h2 className="text-2xl font-serif font-bold">Contribute {pendingUploads.length} Renders</h2>
-                <p className="text-slate-500 text-xs mt-1">Review and label your batch contributions</p>
+                <h2 className="text-2xl font-serif font-bold">Batch Upload: {pendingUploads.length} Items</h2>
+                <p className="text-slate-500 text-xs mt-1">Refine metadata for your session contributions</p>
               </div>
-              <button onClick={() => { setIsUploadModalOpen(false); setPendingUploads([]); }} className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-                <X className="w-6 h-6 text-slate-400" />
-              </button>
+              <div className="flex items-center gap-3">
+                <button 
+                  onClick={() => galleryManualRef.current?.click()} 
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 text-xs font-bold hover:bg-orange-100 transition-colors"
+                >
+                  <PlusCircle className="w-4 h-4" /> Add More Files
+                </button>
+                <button onClick={() => { setIsUploadModalOpen(false); setPendingUploads([]); }} className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                  <X className="w-6 h-6 text-slate-400" />
+                </button>
+              </div>
             </div>
             
             <div className="flex-1 overflow-y-auto space-y-6 pr-2 custom-scrollbar">
-              {pendingUploads.map((item, index) => (
-                <div key={index} className="grid grid-cols-1 md:grid-cols-12 gap-6 p-4 rounded-3xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/30">
-                  <div className="md:col-span-4 relative aspect-square rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-700">
-                    <img src={item.url} className="w-full h-full object-cover" alt={`Preview ${index}`} />
-                    <button onClick={() => removePendingUpload(index)} className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-lg shadow-lg hover:scale-110 active:scale-95 transition-all">
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                  <div className="md:col-span-8 space-y-4">
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Archive Title</label>
-                      <input 
-                        type="text" 
-                        value={item.title} 
-                        onChange={(e) => updatePendingUpload(index, 'title', e.target.value)} 
-                        className="w-full p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-950 text-sm outline-none focus:ring-2 ring-orange-100 transition-all" 
-                      />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {pendingUploads.map((item, index) => (
+                  <div key={index} className="flex flex-col p-4 rounded-3xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/30">
+                    <div className="relative aspect-video rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-700 mb-4">
+                      <img src={item.url} className="w-full h-full object-cover" alt={`Preview ${index}`} />
+                      <button onClick={() => removePendingUpload(index)} className="absolute top-2 right-2 p-1.5 bg-red-500/90 text-white rounded-lg shadow-lg hover:scale-110 active:scale-95 transition-all">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                      <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/60 backdrop-blur-sm rounded text-[8px] text-white font-bold uppercase tracking-tighter">
+                        Item #{index + 1}
+                      </div>
                     </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Technical Context</label>
-                      <textarea 
-                        value={item.prompt} 
-                        onChange={(e) => updatePendingUpload(index, 'prompt', e.target.value)} 
-                        className="w-full p-3 h-20 rounded-xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-950 text-sm outline-none focus:ring-2 ring-orange-100 transition-all resize-none" 
-                      />
+                    <div className="space-y-3">
+                      <div>
+                        <input 
+                          type="text" 
+                          placeholder="Project Title"
+                          value={item.title} 
+                          onChange={(e) => updatePendingUpload(index, 'title', e.target.value)} 
+                          className="w-full p-2.5 rounded-xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs font-bold outline-none focus:ring-2 ring-orange-100 transition-all" 
+                        />
+                      </div>
+                      <div>
+                        <textarea 
+                          placeholder="Technical description..."
+                          value={item.prompt} 
+                          onChange={(e) => updatePendingUpload(index, 'prompt', e.target.value)} 
+                          className="w-full p-2.5 h-16 rounded-xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-950 text-[11px] outline-none focus:ring-2 ring-orange-100 transition-all resize-none" 
+                        />
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
               {pendingUploads.length === 0 && (
-                <div className="text-center py-20 text-slate-400 italic">All items removed.</div>
+                <div className="text-center py-20 text-slate-400 italic">No files selected. Add some renders to begin.</div>
               )}
             </div>
 
-            <div className="mt-8 pt-6 border-t border-slate-100 dark:border-slate-800">
-              <button 
+            <div className="mt-8 pt-6 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-4">
+               <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
+                 Ready to publish {pendingUploads.length} architectural studies
+               </p>
+               <button 
                 onClick={submitManualGalleryUpload} 
                 disabled={pendingUploads.length === 0}
-                className="w-full bg-orange-500 hover:bg-orange-600 disabled:bg-slate-200 text-white font-bold py-4 rounded-2xl shadow-lg transition-all flex items-center justify-center gap-2"
+                className="flex-[0.5] bg-orange-500 hover:bg-orange-600 disabled:bg-slate-200 text-white font-bold py-4 rounded-2xl shadow-lg transition-all flex items-center justify-center gap-2"
               >
-                <Share2 className="w-4 h-4" /> Publish {pendingUploads.length} Items to Showcase
+                <Share2 className="w-4 h-4" /> Publish All Items
               </button>
             </div>
           </div>
@@ -428,16 +450,26 @@ const App: React.FC = () => {
               </div>
             ))}
           </div>
+          {galleryImages.length === 0 && (
+            <div className="text-center py-12 text-slate-400 italic font-medium">Archive is currently empty.</div>
+          )}
           <div className="flex flex-col items-center">
             <div className="bg-white dark:bg-slate-900 border border-orange-100 dark:border-slate-800 rounded-3xl p-8 max-w-2xl w-full flex flex-col items-center gap-6 shadow-sm">
               <div className="w-16 h-16 bg-orange-50 dark:bg-slate-800 rounded-full flex items-center justify-center text-orange-500"><UploadCloud className="w-8 h-8" /></div>
               <div className="text-center">
-                <h3 className="text-lg font-bold">Contribute to Archive</h3>
-                <p className="text-sm text-slate-500 mt-2">Upload multiple previously generated renders to feature them in the Showcase. Sequential contributions are enabled.</p>
+                <h3 className="text-lg font-bold">Manage Studio Showcase</h3>
+                <p className="text-sm text-slate-500 mt-2">Upload multiple renders in a single session to feature them. You can append more files after the initial selection.</p>
               </div>
-              <button onClick={() => galleryManualRef.current?.click()} className="bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 px-8 py-3.5 rounded-2xl text-sm font-bold flex items-center gap-2 hover:scale-105 active:scale-95 transition-all">
-                <ImageIcon className="w-4 h-4" /> Select Renders (Multiple)
-              </button>
+              <div className="flex flex-wrap justify-center gap-4 w-full">
+                <button onClick={() => galleryManualRef.current?.click()} className="flex-1 min-w-[200px] bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 px-8 py-3.5 rounded-2xl text-sm font-bold flex items-center justify-center gap-2 hover:scale-105 active:scale-95 transition-all">
+                  <ImageIcon className="w-4 h-4" /> Select Batch Renders
+                </button>
+                {galleryImages.length > 0 && (
+                  <button onClick={handleClearArchive} className="flex-1 min-w-[200px] border border-red-100 dark:border-red-900/30 bg-red-50 dark:bg-red-900/10 text-red-500 px-8 py-3.5 rounded-2xl text-sm font-bold flex items-center justify-center gap-2 hover:bg-red-100 transition-all">
+                    <Trash2 className="w-4 h-4" /> Delete All Images
+                  </button>
+                )}
+              </div>
               <input type="file" ref={galleryManualRef} onChange={handleManualGalleryFileSelection} accept="image/*" multiple className="hidden" />
             </div>
           </div>
